@@ -17,7 +17,7 @@ y_AllData=zeros(1,totalcharacter,totalblock,totalsubject); %initializing
 %High cut off frequencies for the bandpass filters (90 Hz for all)
 high_cutoff = ones(1,subban_no)*90;
 %Low cut off frequencies for the bandpass filters (ith bandpass filter low cutoff frequency 8*i)
-low_cutoff =8:8:8*subban_no;
+low_cutoff =8:8:8*subban_no; % 8,16,24,32......
 filter_order=2; % Filter Order of bandpass filters
 PassBandRipple_val=1;
 bpFilters=cell(subban_no,1); % Form and store bandpass filters
@@ -30,8 +30,8 @@ for i=1:subban_no
 end
 
 %% Filtering
-eeg_path_list = dir(fullfile(dataset,'*.mat'));
-sort_nat_name=sort_nat({eeg_path_list.name});
+eeg_path_list = dir(fullfile(dataset,'*.mat')); % 获取全部EEG样本列表
+sort_nat_name=sort_nat({eeg_path_list.name}); % 列表按名称排序
 for subject=1:totalsubject
     nameofdata=fullfile(dataset,sort_nat_name{subject});
     data=load(nameofdata); % Loading the subject data

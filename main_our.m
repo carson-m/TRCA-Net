@@ -41,9 +41,9 @@ end
 if strcmp(dataset,'Bench')
     is_dataset=1;
     subban_no=3;
-    totalsubject=35; % # of subjects
-    totalblock=6; % # of blocks
-    totalcharacter=40; % # of characters
+    totalsubject=35; % # of subjects 受试人数
+    totalblock=6; % # of blocks 每个被试的测试次数
+    totalcharacter=40; % # of characters 字符选项数
     sampling_rate=250; % Sampling rate
     visual_latency=0.14; % Average visual latency of subjects
     visual_cue=0.5; % Length of visual cue used at collection of the dataset
@@ -208,13 +208,13 @@ for block=1:totalblock
     train_tmp=zeros(subban_no,sample_length,totalcharacter,totalcharacter,totalblock-1,totalsubject); % Initialization
     test_tmp=zeros(subban_no,sample_length,totalcharacter,totalcharacter,totalsubject); % Initialization
     for subject =1:totalsubject
-        sub_data=train(:,:,:,:,subject);
-        sub_data=permute(sub_data,[3 1 2 4]);% (# of characters,# of channels, # sample length, # of blocks)
-        model = train_trca(sub_data, sampling_rate, subban_no,is_dataset);
+        sub_data=train(:,:,:,:,subject); % 对每个被试
+        sub_data=permute(sub_data,[3 1 2 4]); % (# of characters,# of channels, # sample length, # of blocks)
+        model = train_trca(sub_data, sampling_rate, subban_no,is_dataset); % 得到trca模型
         %size(model.W)%3    40     9
-        testdata=squeeze(test(:,:,:,subject)); % (# of channels, # sample length,  # of characters)
-        testdata = squeeze(permute(testdata,[3 1 2]));% (# of characters, # of channels, # sample length )
-        estimated = test_trca(testdata, model, is_ensemble,is_dataset);
+        testdata = squeeze(test(:,:,:,subject)); % (# of channels, # sample length,  # of characters)
+        testdata = squeeze(permute(testdata,[3 1 2])); % (# of characters, # of channels, # sample length )
+        estimated = test_trca(testdata, model, is_ensemble,is_dataset); % 测试trca性能
         is_correct = (estimated==[1:1:totalcharacter]);
         %accs(block) = mean(is_correct)*100;
         fprintf('Trial %d: Accuracy = %2.2f%%',...
