@@ -14,9 +14,9 @@ AllData=zeros(total_channels,sample_length,totalcharacter,totalblock,totalsubjec
 y_AllData=zeros(1,totalcharacter,totalblock,totalsubject); %initializing
 
 %% Forming bandpass filters
-%High cut off frequencies for the bandpass filters (90 Hz for all)
+% High cut off frequencies for the bandpass filters (90 Hz for all)
 high_cutoff = ones(1,subban_no)*90;
-%Low cut off frequencies for the bandpass filters (ith bandpass filter low cutoff frequency 8*i)
+% Low cut off frequencies for the bandpass filters (ith bandpass filter low cutoff frequency 8*i)
 low_cutoff =8:8:8*subban_no; % 8,16,24,32......
 filter_order=2; % Filter Order of bandpass filters
 PassBandRipple_val=1;

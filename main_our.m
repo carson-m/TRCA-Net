@@ -226,11 +226,11 @@ for block=1:totalblock
         
         processed_signal=zeros(subban_no,sample_length,totalcharacter,totalcharacter,totalblock-1); % Initialization
         filtered_data=zeros(subban_no,total_channels,sample_length,1);
-        for cla=1:totalcharacter
-            for blo=1:size(sub_data,4)
-                for w_n =1:size(model.W,2)
-                    for f_b=1:subban_no
-                        for cha=1:total_channels
+        for cla=1:totalcharacter % 对每个character
+            for blo=1:size(sub_data,4) % 每个block
+                for w_n =1:size(model.W,2) % 每个target(cla是待识别，w_n是已知类别的w) W[fb,targ,(dim(w)=# of channels)]
+                    for f_b=1:subban_no % 每个subband
+                        for cha=1:total_channels % 每个channel
                             filter_data=filtfilt(bpFilters{f_b},squeeze(sub_data(cla,cha,:,blo)));
                             filtered_data(f_b,cha,:,:)=filter_data;
                         end
@@ -256,7 +256,7 @@ for block=1:totalblock
         end
         test_tmp(:,:,:,:,subject)=processed_signal_test;          % (# of n_fb, # sample length, # of w_n, # of characters, # of subjects)%
     end
-    train_tmp=permute(train_tmp,[3 2 1 4  5 6]);% ( # of w_n,# sample length, # of n_fb,  # of characters, # of blocks, # of subjects)
+    train_tmp=permute(train_tmp,[3 2 1 4 5 6]);% ( # of w_n,# sample length, # of n_fb,  # of characters, # of blocks, # of subjects)
     sizes=size(train_tmp);
     train=reshape(train_tmp,[sizes(1),sizes(2),sizes(3),totalcharacter*length(allblock)*totalsubject*1]);% ( # of w_n,# sample length, # of n_fb,N)
     train_y=y_AllData(:,:,allblock,:);
