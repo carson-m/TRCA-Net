@@ -28,7 +28,7 @@ def preproc(dir, channels, samples, num_character, num_block):
         list[i] = os.path.join(dir, list[i])
     
     all_data = np.zeros([len(channels), len(samples), num_character, num_block, num_subjects])
-    all_data_y = np.zeros([1, num_character, num_block, num_subjects])
+    all_data_y = np.zeros([num_character, num_block, num_subjects])
     # load the data
     for subject in range(num_subjects):
         mat_contents = sio.loadmat(list[subject])
@@ -37,6 +37,6 @@ def preproc(dir, channels, samples, num_character, num_block):
         all_data[:, :, :, :, subject] = mat_dat
     
     for cha in range(num_character):
-        all_data_y[0, cha, :, :] = cha
+        all_data_y[cha, :, :] = cha
     
     return all_data, all_data_y

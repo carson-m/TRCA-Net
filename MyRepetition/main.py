@@ -7,7 +7,7 @@ from itr import itr
 
 def main():
     # set parameters
-    is_ensemble = False # Use Ensemble TRCA or not
+    is_ensemble = True # Use Ensemble TRCA or not
     t_pre_stimulus = 0.5 # time before stimulus[s]
     t_visual_latency = 0.14 # time visual latency[s]
     t_visual_cue = 0.5 # time visual cue[s]
@@ -41,48 +41,46 @@ def main():
         bpFilters.append(filt_tmp)
     
     # Bandpass filtering
-    filtered_data = np.zeros([num_channel,num_sample,num_character,num_block,num_subject,num_subband])
+    filtered_data = np.zeros([num_channel,num_sample,num_character,num_block,num_subject,num_subband]) # Data processed by filterbank
     for i in range(num_subband):
         filtered_data[:,:,:,:,:,i] = sig.sosfiltfilt(bpFilters[i],all_data,axis=1)
     
+    ground_truth = np.arange(num_character)
+    accuracy_trca = np.zeros([num_subject,num_block])
+    net_train_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_block-1,num_subject]) #subband,#sample,#character,#w,#block,#subject
+    net_test_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_subject]) #subband,#sample,#character,#w,#subject
     for block_i in range(num_block):
         # cross validation: leave one out
-        block_selection = range(num_block)
-        block_selection[block_i]=[]
-        train_data = all_data[:,:,:,block_selection,:]
-        test_data = np.squeeze(all_data[:,:,:,block_i,:])
+        training_blocks = range(num_block)
+        training_blocks[block_i]=[]
+        trca_train_data = filtered_data[:,:,:,training_blocks,:,:] # channel,sample,character,block,subject,subband
+        trca_test_data = np.squeeze(filtered_data[:,:,:,block_i,:,:]) # channel,sample,character,subject,subband
         # TRCA Analysis
-        W = np.zeros([num_subject,num_character,num_subband,num_channel])
+        # model.w(num_character,num_subband,num_channel)
         for subject_i in range(num_subject):
-            model = train_trca(np.squeeze(train_data[subject_i,:,:,:,:]),sample_rate)
-            W[subject_i,:,:,:] = model['w']
-            
-    
+            model = train_trca(np.squeeze(trca_train_data[:,:,:,:,subject_i,:]).transpose(2,0,1,3,4),sample_rate)
+            result = trca_recognition(np.squeeze(trca_test_data[:,:,:,subject_i,:]).transpose(2,0,1,3))
+            is_correct = (result == ground_truth)
+            accuracy_trca[subject_i,block_i] = np.mean(is_correct)
+            print("Subject %d, Test Block %d, Accuracy: %.2f%%" % (subject_i, block_i, accuracy_trca[subject_i,block_i]*100))
+            for character_i in range(num_character):
+                for subband_i in range(num_subband):
+                    for w_i in range(character_i):
+                        for blk_i in range(num_block-1):
+                            net_train_data_tmp[subband_i,:,character_i,w_i,blk_i,subject_i] = np.squeeze(trca_train_data\
+                                [:,:,character_i,blk_i,subject_i,subband_i]).transpose()*model['w'][subband_i,w_i,:]
+                        net_test_data_tmp[subband_i,:,character_i,w_i,subject_i] = np.squeeze(trca_test_data\
+                            [:,:,character_i,subject_i,subband_i]).transpose()*model['w'][subband_i,w_i]
         
-    # # Auxillary Matrices
-    # train_tmp = np.zeros([num_character, num_channel, visual_cue_sample_points, num_block])
-    # test_tmp = np.zeros([num_character, num_channel, visual_cue_sample_points])
-    # filtered_train_tmp = np.zeros([num_subband, num_character, num_channel, visual_cue_sample_points, num_block])
-    # filtered_test_tmp = np.zeros([num_subband, num_character, num_channel, visual_cue_sample_points])
-    
-    # # Cross validation
-    # for block in range(num_block):
-    #     allblock = np.arange(num_block)
-    #     allblock[block] = [] # Exclude the block for validation
+        train_set_size = num_character*(num_block-1)*num_subject
+        net_train_data = net_train_data_tmp.transpose([2,4,5,1,3,0]).reshape([train_set_size,num_sample,num_character,num_subband])
+        net_train_y = all_data_y[:,training_blocks,:].reshape([train_set_size,1]).squeeze()
         
-    #     train = all_data[:, :, :, allblock, :]
-    #     test = np.squeeze(all_data[:, :, :, block, :])
-    #     for subject in range(subject_num):
-    #         train_tmp = np.squeeze(train[:,:,:,:,subject]).transpose(2, 0, 1, 3)
-    #         model = train_trca(train_tmp, sample_rate. num_subband)
-    #         test_tmp = np.squeeze(test[:,:,:,subject]).transpose(2, 0, 1)
-    #         result = trca_recognition(test_tmp, model, is_ensemble)
-    #         correct = result == reference_result
-    #         acc_trca[subject, block] = np.mean(correct) * 100
-    #         itr_trca[subject, block] = itr(num_character, acc_trca[subject, block] / 100, t_sel)
-    #         for subband in range(num_subband):
-    #             filtered_train_tmp[subband, :, :, :, :] = sig.sosfiltfilt(bpFilters[subband], train_tmp, axis=2)
-    #             filtered_test_tmp[subband, :, :, :, :] = sig.sosfiltfilt(bpFilters[subband], test_tmp, axis=2)
+        test_set_size = num_character*num_subject
+        net_test_data = net_test_data_tmp.transpose([2,4,1,3,0]).reshape([test_set_size,num_sample,num_character,num_subband])
+        net_test_y = all_data_y[:,block_i,:].squeeze().reshape([test_set_size,1]).squeeze()
+        
+
 
 if __name__ == '__main__':
     main()
