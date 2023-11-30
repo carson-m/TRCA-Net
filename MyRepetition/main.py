@@ -4,6 +4,51 @@ from preproc import preproc
 from train_trca import train_trca
 from trca_recognition import trca_recognition
 from itr import itr
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms, utils
+import torch.nn as nn
+import torch.nn.functional as F
+from tqdm import tqdm
+import torch.optim as optim
+
+class MyDataset(Dataset): # Custom Dataset
+    def __init__(self,lables,data):
+        self.lables = lables # set_size,num_sample,num_character,num_subband
+        self.data = data # set_size
+    
+    def __getitem__(self,idx):
+        data_tmp = np.squeeze(self.data[idx,:,:,:])
+        lable_tmp = self.lable[idx]
+        return data_tmp.float(),lable_tmp.float()
+    def __len__(self):
+        return len(self.lables)
+
+    
+class NetStage1(nn.Module):
+    def __init__(self,sizes,p_dropout_firststage,p_dropout_final):
+        # sizes(# sample, # character=w_n, # subband)
+        super(NetStage1,self).__init__()
+        self.sizes=sizes
+        self.conv1 = nn.Conv2d(in_channels=sizes(2),out_channels=1,kernel_size=1,padding=0)
+        self.conv2 = nn.Conv2d(in_channels=1,out_channels=120,kernel_size=[1,sizes(1)],padding=0)
+        self.conv3 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[2,1],stride=[2,1])
+        self.conv4 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[10,1],padding='same')
+        
+        self.fc = nn.Linear(in_features=sizes(0)*60,out_features=sizes(1))
+        
+        self.act = F.relu
+        self.drop1st = nn.Dropout2d(p_dropout_firststage)
+        self.dropfinal = nn.Dropout2d(p_dropout_final)
+    
+    def forward(self, x):
+        x = self.drop1st(self.conv2(self.conv1(x)))
+        x = self.act(self.drop1st(self.conv3(x)))
+        x = self.dropfinal(self.conv4(x))
+        
+        x = x.view(-1,60*self.sizes(0))
+        x = self.fc(x)
+        return x
 
 def main():
     # set parameters
@@ -21,6 +66,10 @@ def main():
     passband_ripple = 1 # passband ripple[dB]
     high_cutoff = np.ones(num_subband) * 90 # high cutoff frequency[Hz]
     low_cutoff = np.arange(8, 8 * (num_subband + 1), 8) # low cutoff frequency[Hz]
+    dropout_first_stage = 0.1 # Dropout probability of first two dropout layers at first stage
+    dropout_second_stage = 0.6 # Dropout probabilities of first two dropout layers at second stage
+    dropout_final = 0.95
+    epochs_first_stage = 500
     
     # Preprocess
     t_sel = t_pre_stimulus + t_visual_cue
@@ -80,6 +129,48 @@ def main():
         net_test_data = net_test_data_tmp.transpose([2,4,1,3,0]).reshape([test_set_size,num_sample,num_character,num_subband])
         net_test_y = all_data_y[:,block_i,:].squeeze().reshape([test_set_size,1]).squeeze()
         
+        # Net Training Stage:1
+        sizes = net_train_data.shape([1,2,3]) # sample, # character, # subband
+        net1 = NetStage1(sizes,dropout_first_stage,dropout_final)
+        train_set_first_stage = MyDataset(net_train_y,net_train_data)
+        test_set_first_stage = MyDataset(net_test_y,net_test_data)
+        train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers=8)
+        test_loader_first_stage = DataLoader(test_set_first_stage,batch_size=100,shuffle=False,num_workers=8)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(net1.parameters(),lr=0.0001)
+        train_loss_first_stage = []
+        test_loss_first_stage = []
+        accuracies = []
+        for epoch in range(epochs_first_stage):
+            train_loss = 0.0
+            test_loss = 0.0
+            net1.train()
+            for idx,(data,label) in tqdm(enumerate(train_loader_first_stage)):
+                optimizer.zero_grad() # reset gradient to zero
+                output = net1(data)
+                loss = criterion(output,label)
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item() * data.shape[0]
+            
+            net1.eval()
+            correct = 0
+            total = 0
+            for idx,(data,label) in tqdm(enumerate(test_loader_first_stage)):
+                output = net1(data)
+                loss = criterion(output,label)
+                test_loss += loss.item() * data.shape[0]
+                __,predicted = torch.max(output.data,1)
+                total += label.size(0)
+                correct += (predicted == label).sum().item()
+            train_loss = train_loss / train_set_size
+            test_loss = test_loss / test_set_size
+            train_loss_first_stage.append(train_loss)
+            test_loss_first_stage.append(test_loss)
+            accuracy = correct / total
+            accuracies.append(accuracy)
+            
+            print(f"TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
 
 
 if __name__ == '__main__':

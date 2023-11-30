@@ -258,14 +258,14 @@ for block=1:totalblock
     end
     train_tmp=permute(train_tmp,[3 2 1 4 5 6]);% ( # of w_n,# sample length, # of n_fb,  # of characters, # of blocks, # of subjects)
     sizes=size(train_tmp);
-    train=reshape(train_tmp,[sizes(1),sizes(2),sizes(3),totalcharacter*length(allblock)*totalsubject*1]);% ( # of w_n,# sample length, # of n_fb,N)
+    train=reshape(train_tmp,[sizes(1),sizes(2),sizes(3),totalcharacter*length(allblock)*totalsubject*1]);% ( # of w_n, # sample, # subband, N)
     train_y=y_AllData(:,:,allblock,:);
     train_y=reshape(train_y,[1,totalcharacter*length(allblock)*totalsubject*1]);
     train_y=categorical(train_y);
     
     test_tmp=permute(test_tmp,[3 2 1 4 5]);% ( # of w_n,# sample length, # of n_fb,  # of characters,# of subjects)
     sizes=size(test_tmp);
-    testdata=reshape(test_tmp,[sizes(1),sizes(2),sizes(3),totalcharacter*totalsubject]);
+    testdata=reshape(test_tmp,[sizes(1),sizes(2),sizes(3),totalcharacter*totalsubject]); % # w_n, # sample, # subband, # num_character*num_subject
     test_y=y_AllData(:,:,block,:);
     test_y=reshape(test_y,[1,totalcharacter*totalsubject*1]);
     test_y=categorical(test_y);
@@ -365,7 +365,7 @@ for block=1:totalblock
         
         test_tmp_2=test_tmp(:,:,:,:,s);% ( # of w_n,# sample length, # of n_fb,  # of characters, # of blocks)
         sizes=size(test_tmp_2);
-        testdata=reshape(test_tmp_2,[sizes(1),sizes(2),sizes(3),totalcharacter*1]);% ( # of w_n,# sample length, # of n_fb,N)
+        testdata=reshape(test_tmp_2,[sizes(1),sizes(2),sizes(3),totalcharacter*1]);% ( # of w_n,# sample, # subband, N)
         test_y=y_AllData(:,:,block,s);
         test_y=reshape(test_y,[1,totalcharacter*1]);
         test_y=categorical(test_y);
