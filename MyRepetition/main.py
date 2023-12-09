@@ -85,7 +85,7 @@ def main():
     # Get bandpass filters
     bpFilters = []
     for i in range(num_subband):
-        filt_tmp = sig.iirfilter(filter_order, [2*low_cutoff[i]/sample_rate, 2*high_cutoff[i]/sample_rate],\
+        filt_tmp = sig.iirfilter(filter_order, [low_cutoff[i], high_cutoff[i]],\
             btype='bandpass', ftype='cheby1', output='sos', fs=sample_rate, rp=passband_ripple)
         bpFilters.append(filt_tmp)
     
@@ -94,21 +94,20 @@ def main():
     for i in range(num_subband):
         filtered_data[:,:,:,:,:,i] = sig.sosfiltfilt(bpFilters[i],all_data,axis=1)
     
-    ground_truth = np.arange(num_character)
+    ground_truth = np.arange(num_character)+1
     accuracy_trca = np.zeros([num_subject,num_block])
     net_train_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_block-1,num_subject]) #subband,#sample,#character,#w,#block,#subject
     net_test_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_subject]) #subband,#sample,#character,#w,#subject
     for block_i in range(num_block):
         # cross validation: leave one out
-        training_blocks = range(num_block)
-        training_blocks[block_i]=[]
+        training_blocks = np.delete(np.arange(num_block),block_i)
         trca_train_data = filtered_data[:,:,:,training_blocks,:,:] # channel,sample,character,block,subject,subband
         trca_test_data = np.squeeze(filtered_data[:,:,:,block_i,:,:]) # channel,sample,character,subject,subband
         # TRCA Analysis
         # model.w(num_character,num_subband,num_channel)
         for subject_i in range(num_subject):
             model = train_trca(np.squeeze(trca_train_data[:,:,:,:,subject_i,:]).transpose(2,0,1,3,4),sample_rate)
-            result = trca_recognition(np.squeeze(trca_test_data[:,:,:,subject_i,:]).transpose(2,0,1,3))
+            result = trca_recognition(np.squeeze(trca_test_data[:,:,:,subject_i,:]).transpose(2,0,1,3),model,is_ensemble)
             is_correct = (result == ground_truth)
             accuracy_trca[subject_i,block_i] = np.mean(is_correct)
             print("Subject %d, Test Block %d, Accuracy: %.2f%%" % (subject_i, block_i, accuracy_trca[subject_i,block_i]*100))
@@ -116,10 +115,10 @@ def main():
                 for subband_i in range(num_subband):
                     for w_i in range(character_i):
                         for blk_i in range(num_block-1):
-                            net_train_data_tmp[subband_i,:,character_i,w_i,blk_i,subject_i] = np.squeeze(trca_train_data\
-                                [:,:,character_i,blk_i,subject_i,subband_i]).transpose()*model['w'][subband_i,w_i,:]
-                        net_test_data_tmp[subband_i,:,character_i,w_i,subject_i] = np.squeeze(trca_test_data\
-                            [:,:,character_i,subject_i,subband_i]).transpose()*model['w'][subband_i,w_i]
+                            temp = np.squeeze(trca_train_data[:,:,character_i,blk_i,subject_i,subband_i]).transpose()
+                            net_train_data_tmp[subband_i,:,character_i,w_i,blk_i,subject_i] = np.dot(temp,model['w'][w_i,subband_i,:])
+                        net_test_data_tmp[subband_i,:,character_i,w_i,subject_i] = np.dot(np.squeeze(trca_test_data\
+                            [:,:,character_i,subject_i,subband_i]).transpose(),model['w'][w_i,subband_i,:])
         
         train_set_size = num_character*(num_block-1)*num_subject
         net_train_data = net_train_data_tmp.transpose([2,4,5,1,3,0]).reshape([train_set_size,num_sample,num_character,num_subband])

@@ -18,6 +18,7 @@ def trca(eeg_dat):
     return W
     
 def train_trca(eeg_dat,fs):
+    # eeg_dat (character,channel,sample,block,subband)
     num_target,num_channel,num_sample,__,num_subband = eeg_dat.shape
     # traindata = np.zeros((num_target,num_subband,num_channel,num_sample))
     traindata = np.mean(eeg_dat,axis=3).transpose(0,3,1,2)
