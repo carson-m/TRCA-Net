@@ -39,4 +39,4 @@ def preproc(dir, channels, samples, num_character, num_block):
     for cha in range(num_character):
         all_data_y[cha, :, :] = cha
     
-    return all_data, all_data_y
+    return all_data, all_data_y.astype(np.int64)

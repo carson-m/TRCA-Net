@@ -19,25 +19,26 @@ class MyDataset(Dataset): # Custom Dataset
     
     def __getitem__(self,idx):
         data_tmp = np.squeeze(self.data[idx,:,:,:])
-        lable_tmp = self.lable[idx]
-        return data_tmp.float(),lable_tmp.float()
+        lable_tmp = self.lables[idx]
+        return data_tmp.astype(np.float32),lable_tmp
     def __len__(self):
         return len(self.lables)
 
     
 class NetStage1(nn.Module):
     def __init__(self,sizes,p_dropout_firststage,p_dropout_final):
-        # sizes(# sample, # character=w_n, # subband)
+        # sizes(# subband, # sample, # character=w_n)
         super(NetStage1,self).__init__()
         self.sizes=sizes
-        self.conv1 = nn.Conv2d(in_channels=sizes(2),out_channels=1,kernel_size=1,padding=0)
-        self.conv2 = nn.Conv2d(in_channels=1,out_channels=120,kernel_size=[1,sizes(1)],padding=0)
-        self.conv3 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[2,1],stride=[2,1])
-        self.conv4 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[10,1],padding='same')
+        self.conv1 = nn.Conv2d(in_channels=sizes[0],out_channels=1,kernel_size=1,padding=0) # 1 * 125 * 40
+        self.conv2 = nn.Conv2d(in_channels=1,out_channels=120,kernel_size=[1,sizes[2]],padding=0) # 120 * 125 * 1
+        self.conv3 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[2,1],stride=[2,1]) # 120 * 62 * 1
+        self.conv4 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[10,1],padding='same') # 120 * 62 * 1
         
-        self.fc = nn.Linear(in_features=sizes(0)*60,out_features=sizes(1))
+        self.fc = nn.Linear(in_features=7440, out_features=sizes[2])
         
         self.act = F.relu
+        self.softmax = nn.Softmax(dim=1)
         self.drop1st = nn.Dropout2d(p_dropout_firststage)
         self.dropfinal = nn.Dropout2d(p_dropout_final)
     
@@ -46,8 +47,9 @@ class NetStage1(nn.Module):
         x = self.act(self.drop1st(self.conv3(x)))
         x = self.dropfinal(self.conv4(x))
         
-        x = x.view(-1,60*self.sizes(0))
+        x = x.view(-1,7440)
         x = self.fc(x)
+        x = self.softmax(x)
         return x
 
 def main():
@@ -74,8 +76,8 @@ def main():
     # Preprocess
     t_sel = t_pre_stimulus + t_visual_cue
     total_delay = t_pre_stimulus + t_visual_latency
-    delay_sample_points = int(total_delay * sample_rate)
-    num_sample = int(t_visual_cue * sample_rate)
+    delay_sample_points = int(np.floor(total_delay * sample_rate))
+    num_sample = int(np.floor(t_visual_cue * sample_rate))
     samples = np.arange(delay_sample_points, delay_sample_points + num_sample)
     all_data, all_data_y = preproc('..\..\Data\Benchmark', channels, samples, num_character, num_block) # GET DATA all_data: preprocessed data, all_data_y: labels
     # all_data: (# channels, # sample, # characters, # blocks, # subjects)
@@ -96,6 +98,7 @@ def main():
     
     ground_truth = np.arange(num_character)+1
     accuracy_trca = np.zeros([num_subject,num_block])
+    itr_trca = np.zeros([num_subject,num_block])
     net_train_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_block-1,num_subject]) #subband,#sample,#character,#w,#block,#subject
     net_test_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_subject]) #subband,#sample,#character,#w,#subject
     for block_i in range(num_block):
@@ -110,7 +113,8 @@ def main():
             result = trca_recognition(np.squeeze(trca_test_data[:,:,:,subject_i,:]).transpose(2,0,1,3),model,is_ensemble)
             is_correct = (result == ground_truth)
             accuracy_trca[subject_i,block_i] = np.mean(is_correct)
-            print("Subject %d, Test Block %d, Accuracy: %.2f%%" % (subject_i, block_i, accuracy_trca[subject_i,block_i]*100))
+            itr_trca[subject_i,block_i] = itr(num_character,accuracy_trca[subject_i,block_i], t_sel)
+            print("Subject %d, Test Block %d, Accuracy: %.2f%%, ITR: %.2f" % (subject_i, block_i, accuracy_trca[subject_i,block_i]*100,itr_trca[subject_i,block_i]))
             for character_i in range(num_character):
                 for subband_i in range(num_subband):
                     for w_i in range(character_i):
@@ -121,16 +125,16 @@ def main():
                             [:,:,character_i,subject_i,subband_i]).transpose(),model['w'][w_i,subband_i,:])
         
         train_set_size = num_character*(num_block-1)*num_subject
-        net_train_data = net_train_data_tmp.transpose([2,4,5,1,3,0]).reshape([train_set_size,num_sample,num_character,num_subband])
+        net_train_data = net_train_data_tmp.transpose([2,4,5,0,1,3]).reshape([train_set_size,num_subband,num_sample,num_character])
         net_train_y = all_data_y[:,training_blocks,:].reshape([train_set_size,1]).squeeze()
         
         test_set_size = num_character*num_subject
-        net_test_data = net_test_data_tmp.transpose([2,4,1,3,0]).reshape([test_set_size,num_sample,num_character,num_subband])
+        net_test_data = net_test_data_tmp.transpose([2,4,0,1,3]).reshape([test_set_size,num_subband,num_sample,num_character])
         net_test_y = all_data_y[:,block_i,:].squeeze().reshape([test_set_size,1]).squeeze()
         
         # Net Training Stage:1
-        sizes = net_train_data.shape([1,2,3]) # sample, # character, # subband
-        net1 = NetStage1(sizes,dropout_first_stage,dropout_final)
+        sizes = net_train_data.shape[1:4] # sample, # character, # subband
+        net1 = NetStage1(sizes,dropout_first_stage,dropout_final) # net for stage 1
         train_set_first_stage = MyDataset(net_train_y,net_train_data)
         test_set_first_stage = MyDataset(net_test_y,net_test_data)
         train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers=8)
@@ -143,7 +147,7 @@ def main():
         for epoch in range(epochs_first_stage):
             train_loss = 0.0
             test_loss = 0.0
-            net1.train()
+            net1.train() # Switch to training mode
             for idx,(data,label) in tqdm(enumerate(train_loader_first_stage)):
                 optimizer.zero_grad() # reset gradient to zero
                 output = net1(data)
@@ -152,7 +156,7 @@ def main():
                 optimizer.step()
                 train_loss += loss.item() * data.shape[0]
             
-            net1.eval()
+            net1.eval() # Switch to evaluation mode
             correct = 0
             total = 0
             for idx,(data,label) in tqdm(enumerate(test_loader_first_stage)):
