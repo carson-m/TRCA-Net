@@ -25,12 +25,12 @@ class MyDataset(Dataset): # Custom Dataset
         return len(self.lables)
 
     
-class NetStage1(nn.Module):
-    def __init__(self,sizes,p_dropout_firststage,p_dropout_final):
+class DNN(nn.Module):
+    def __init__(self,sizes,p_dropout_1,p_dropout_2):
         # sizes(# subband, # sample, # character=w_n)
-        super(NetStage1,self).__init__()
+        super(DNN,self).__init__()
         self.sizes=sizes
-        self.conv1 = nn.Conv2d(in_channels=sizes[0],out_channels=1,kernel_size=1,padding=0) # 1 * 125 * 40
+        self.conv1 = nn.Conv2d(in_channels=sizes[0],out_channels=1,kernel_size=1,padding=0,bias=False) # 1 * 125 * 40
         self.conv2 = nn.Conv2d(in_channels=1,out_channels=120,kernel_size=[1,sizes[2]],padding=0) # 120 * 125 * 1
         self.conv3 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[2,1],stride=[2,1]) # 120 * 62 * 1
         self.conv4 = nn.Conv2d(in_channels=120,out_channels=120,kernel_size=[10,1],padding='same') # 120 * 62 * 1
@@ -39,8 +39,8 @@ class NetStage1(nn.Module):
         
         self.act = F.relu
         self.softmax = nn.Softmax(dim=1)
-        self.drop1st = nn.Dropout2d(p_dropout_firststage)
-        self.dropfinal = nn.Dropout2d(p_dropout_final)
+        self.drop1st = nn.Dropout2d(p_dropout_1)
+        self.dropfinal = nn.Dropout2d(p_dropout_2)
     
     def forward(self, x):
         x = self.drop1st(self.conv2(self.conv1(x)))
@@ -51,10 +51,28 @@ class NetStage1(nn.Module):
         x = self.fc(x)
         x = self.softmax(x)
         return x
+    
+    # define function "transfer" to transfer the weights from the trained model to the new model
+    def transfer(self, stage1_model):
+        self.conv1.weight.data = stage1_model.conv1.weight.data
+        
+        self.conv2.weight.data = stage1_model.conv2.weight.data
+        self.conv2.bias.data = stage1_model.conv2.bias.data
+        
+        self.conv3.weight.data = stage1_model.conv3.weight.data
+        self.conv3.bias.data = stage1_model.conv3.bias.data
+        
+        self.conv4.weight.data = stage1_model.conv4.weight.data
+        self.conv4.bias.data = stage1_model.conv4.bias.data
+        
+        self.fc.weight.data = stage1_model.fc.weight.data
+        self.fc.bias.data = stage1_model.fc.bias.data
+
 
 def main():
     # set parameters
     is_ensemble = True # Use Ensemble TRCA or not
+    transfer_learning = True # Use Transfer Learning or not
     t_pre_stimulus = 0.5 # time before stimulus[s]
     t_visual_latency = 0.14 # time visual latency[s]
     t_visual_cue = 0.5 # time visual cue[s]
@@ -72,6 +90,8 @@ def main():
     dropout_second_stage = 0.6 # Dropout probabilities of first two dropout layers at second stage
     dropout_final = 0.95
     epochs_first_stage = 500
+    max_epochs_first_stage = 1000
+    max_epochs_second_stage = 2000
     
     # Preprocess
     t_sel = t_pre_stimulus + t_visual_cue
@@ -99,6 +119,7 @@ def main():
     ground_truth = np.arange(num_character)+1
     accuracy_trca = np.zeros([num_subject,num_block])
     itr_trca = np.zeros([num_subject,num_block])
+    # initialize data for net training
     net_train_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_block-1,num_subject]) #subband,#sample,#character,#w,#block,#subject
     net_test_data_tmp = np.zeros([num_subband,num_sample,num_character,num_character,num_subject]) #subband,#sample,#character,#w,#subject
     for block_i in range(num_block):
@@ -134,7 +155,7 @@ def main():
         
         # Net Training Stage:1
         sizes = net_train_data.shape[1:4] # sample, # character, # subband
-        net1 = NetStage1(sizes,dropout_first_stage,dropout_final) # net for stage 1
+        net1 = DNN(sizes,dropout_first_stage,dropout_final) # net for stage 1
         train_set_first_stage = MyDataset(net_train_y,net_train_data)
         test_set_first_stage = MyDataset(net_test_y,net_test_data)
         train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers=8)
@@ -173,7 +194,32 @@ def main():
             accuracy = correct / total
             accuracies.append(accuracy)
             
-            print(f"TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+            print(f"1st Stage, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+        
+        # # Net Training Stage:2
+        # for s in range(num_subject):
+        #     net2 = DNN(sizes,dropout_second_stage,dropout_final)
+        #     if transfer_learning:
+        #         net2.transfer(net1)
+        #         epochs_subject = max_epochs_first_stage
+        #     else:
+        #         epochs_subject = max_epochs_second_stage
+        #     # get subject specific data
+        #     train_set_size_subject = num_character*(num_block-1)
+        #     net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
+        #         reshape([train_set_size,num_subband,num_sample,num_character])
+        #     all_data_y_subject = all_data_y[:,training_blocks,:]
+        #     net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size,1]).squeeze()
+        
+        #     test_set_size = num_character
+        #     net_test_data_subject = net_test_data_tmp[:,:,:,:,s].squeeze()\
+        #         .transpose([2,0,1,3]).reshape([test_set_size,num_subband,num_sample,num_character])
+        #     all_data_y_subject = all_data_y[:,block_i,:].squeeze()
+        #     net_test_y_subject = all_data_y_subject[:,s].squeeze().reshape([test_set_size,1]).squeeze()
+        #     train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
+        #     test_set_second_stage = MyDataset(net_test_y_subject,net_test_data_subject)
+        #     train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=8)
+        #     test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=8)
 
 
 if __name__ == '__main__':
