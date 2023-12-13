@@ -165,6 +165,7 @@ def main():
         # Net Training Stage:1
         sizes = net_train_data.shape[1:4] # sample, # character, # subband
         net1 = DNN(sizes,dropout_first_stage,dropout_final) # net for stage 1
+        net1 = net1.to(device)
         train_set_first_stage = MyDataset(net_train_y,net_train_data)
         test_set_first_stage = MyDataset(net_test_y,net_test_data)
         train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers = num_workers)
