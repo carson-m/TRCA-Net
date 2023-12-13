@@ -108,7 +108,7 @@ def main():
     delay_sample_points = int(np.floor(total_delay * sample_rate))
     num_sample = int(np.floor(t_visual_cue * sample_rate))
     samples = np.arange(delay_sample_points, delay_sample_points + num_sample)
-    all_data, all_data_y = preproc('..\..\Data\Benchmark', channels, samples, num_character, num_block) # GET DATA all_data: preprocessed data, all_data_y: labels
+    all_data, all_data_y = preproc('../../Data/Benchmark', channels, samples, num_character, num_block) # GET DATA all_data: preprocessed data, all_data_y: labels
     # all_data: (# channels, # sample, # characters, # blocks, # subjects)
     # all_data_y: (1, # channels, # blocks, # subjects)
     num_subject = all_data.shape[4] # number of subjects
