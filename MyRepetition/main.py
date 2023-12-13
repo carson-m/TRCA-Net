@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import torch.optim as optim
+import multiprocessing
 
 class MyDataset(Dataset): # Custom Dataset
     def __init__(self,lables,data):
@@ -70,6 +71,14 @@ class DNN(nn.Module):
 
 
 def main():
+    USE_CUDA = True
+    use_cuda = USE_CUDA and torch.cuda.is_available()
+
+    device = torch.device("cuda" if use_cuda else "cpu")
+    print('Using device', device)
+    num_workers = multiprocessing.cpu_count()
+    print('num workers:', num_workers)
+    
     # set parameters
     is_ensemble = True # Use Ensemble TRCA or not
     transfer_learning = True # Use Transfer Learning or not
@@ -158,8 +167,8 @@ def main():
         net1 = DNN(sizes,dropout_first_stage,dropout_final) # net for stage 1
         train_set_first_stage = MyDataset(net_train_y,net_train_data)
         test_set_first_stage = MyDataset(net_test_y,net_test_data)
-        train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers=8)
-        test_loader_first_stage = DataLoader(test_set_first_stage,batch_size=100,shuffle=False,num_workers=8)
+        train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers = num_workers)
+        test_loader_first_stage = DataLoader(test_set_first_stage,batch_size=100,shuffle=False,num_workers = num_workers)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(net1.parameters(),lr=0.0001)
         train_loss_first_stage = []
@@ -170,6 +179,8 @@ def main():
             test_loss = 0.0
             net1.train() # Switch to training mode
             for idx,(data,label) in tqdm(enumerate(train_loader_first_stage)):
+                data = data.to(device)
+                label = label.to(device)
                 optimizer.zero_grad() # reset gradient to zero
                 output = net1(data)
                 loss = criterion(output,label)
@@ -181,6 +192,8 @@ def main():
             correct = 0
             total = 0
             for idx,(data,label) in tqdm(enumerate(test_loader_first_stage)):
+                data = data.to(device)
+                label = label.to(device)
                 output = net1(data)
                 loss = criterion(output,label)
                 test_loss += loss.item() * data.shape[0]
@@ -218,8 +231,8 @@ def main():
         #     net_test_y_subject = all_data_y_subject[:,s].squeeze().reshape([test_set_size,1]).squeeze()
         #     train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
         #     test_set_second_stage = MyDataset(net_test_y_subject,net_test_data_subject)
-        #     train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=8)
-        #     test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=8)
+        #     train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=num_workers)
+        #     test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=num_workers)
 
 
 if __name__ == '__main__':
