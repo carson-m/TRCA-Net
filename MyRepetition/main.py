@@ -76,8 +76,10 @@ def main():
 
     device = torch.device("cuda" if use_cuda else "cpu")
     print('Using device', device)
-    num_workers = multiprocessing.cpu_count()
-    print('num workers:', num_workers)
+    maximum_thread = multiprocessing.cpu_count()
+    print('Available threads:', maximum_thread)
+    num_workers = 8
+    print('Num workers:', num_workers)
     
     # set parameters
     is_ensemble = True # Use Ensemble TRCA or not
