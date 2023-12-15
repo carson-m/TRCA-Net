@@ -255,13 +255,13 @@ def main():
             net_test_y_subject = all_data_y_subject[:,s].squeeze()
             train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
             test_set_second_stage = MyDataset(net_test_y_subject,net_test_data_subject)
-            train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=num_workers)
-            test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=num_workers)
+            train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=num_character*(num_block-1),shuffle=True,num_workers=num_workers)
+            test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=num_character,shuffle=False,num_workers=num_workers)
             sizes = net_train_data.shape[1:4] # sample, # character, # subband
             net2 = DNN(sizes,dropout_second_stage,dropout_final) # net for stage 2
             net2 = net2.to(device)
-            criterion = nn.CrossEntropyLoss()
-            optimizer = optim.Adam(net2.parameters(),lr=0.0001)
+            criterion_second_stage = nn.CrossEntropyLoss()
+            optimizer_second_stage = optim.Adam(net2.parameters(),lr=0.0001)
             train_loss_second_stage = []
             test_loss_second_stage = []
             accuracies_second_stage = []
@@ -272,11 +272,11 @@ def main():
                 for idx,(data,label) in tqdm(enumerate(train_loader_second_stage)):
                     data = data.to(device)
                     label = label.to(device)
-                    optimizer.zero_grad() # reset gradient to zero
+                    optimizer_second_stage.zero_grad() # reset gradient to zero
                     output = net2(data)
-                    loss = criterion(output,label)
+                    loss = criterion_second_stage(output,label)
                     loss.backward()
-                    optimizer.step()
+                    optimizer_second_stage.step()
                     train_loss += loss.item() * data.shape[0]
                 
                 net2.eval() # Switch to evaluation mode
@@ -286,7 +286,7 @@ def main():
                     data = data.to(device)
                     label = label.to(device)
                     output = net2(data)
-                    loss = criterion(output,label)
+                    loss = criterion_second_stage(output,label)
                     test_loss += loss.item() * data.shape[0]
                     __,predicted = torch.max(output.data,1)
                     total += label.size(0)
@@ -300,8 +300,8 @@ def main():
                 
                 print(f"2nd Stage, Suabject:{s}, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
         
-        sio.savemat(result_folder + '/testblock' + str(block_i) + '/net2_result_Subject_' + str(s) + '_.mat', \
-            {'train_loss':train_loss_second_stage,'test_loss':test_loss_second_stage,'accuracy':accuracies_second_stage})
+            sio.savemat(result_folder + '/testblock' + str(block_i) + '/net2_result_Subject_' + str(s) + '_.mat', \
+                {'train_loss':train_loss_second_stage,'test_loss':test_loss_second_stage,'accuracy':accuracies_second_stage})
 
 if __name__ == '__main__':
     main()
