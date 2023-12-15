@@ -246,7 +246,7 @@ def main():
             net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
                 reshape([train_set_size_subject,num_subband,num_sample,num_character])
             all_data_y_subject = all_data_y[:,training_blocks,:]
-            net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size,1]).squeeze()
+            net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size_subject,1]).squeeze()
         
             test_set_size_subject = num_character
             net_test_data_subject = net_test_data_tmp[:,:,:,:,s].squeeze()\
