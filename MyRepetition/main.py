@@ -253,6 +253,7 @@ def main():
                 test_set_size, sizes, dropout_first_stage, dropout_final, epochs_first_stage, "1st Stage, TestBlock:" + str(block_i))
         
         sio.savemat(result_folder + '/testblock' + str(block_i) + '/net1_result.mat', {'train_loss':train_loss_first_stage,'test_loss':test_loss_first_stage,'accuracy':accuracies})
+        torch.save(net1.state_dict(), result_folder + '/testblock' + str(block_i) + '/net1_params.pth')
         
         # Net Training Stage:2
         if transfer_learning:
