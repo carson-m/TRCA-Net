@@ -71,6 +71,62 @@ class DNN(nn.Module):
         self.fc.weight.data = stage1_model.fc.weight.data
         self.fc.bias.data = stage1_model.fc.bias.data
 
+def train_net(device, train_loader, test_loader, train_set_size, test_set_size, sizes, dropout_1, dropout_2, num_epochs, info, transfer_net=None):
+    #sizes: # sample, # character, # subband
+    #train_loader: DataLoader
+    #test_loader: DataLoader
+    #train_set_size: size of training set
+    #test_set_size: size of test set
+    #num_epochs: number of epochs
+    #info: information of training for printing
+    #dropout_1: dropout probability of first dropout layer
+    #dropout_2: dropout probability of second dropout layer
+    
+    net = DNN(sizes,dropout_1,dropout_2) # net for stage 1
+    net = net.to(device)
+    if transfer_net is not None:
+        net.transfer(transfer_net)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(net.parameters(),lr=0.0001)
+    train_loss_array = []
+    test_loss_array = []
+    accuracy_array = []
+    for epoch in range(num_epochs):
+        train_loss = 0.0
+        test_loss = 0.0
+        net.train() # Switch to training mode
+        for __,(data,label) in tqdm(enumerate(train_loader)):
+            data = data.to(device)
+            label = label.to(device)
+            optimizer.zero_grad() # reset gradient to zero
+            output = net(data)
+            loss = criterion(output,label)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * data.shape[0]
+                
+        net.eval() # Switch to evaluation mode
+        correct = 0
+        total = 0
+        for __,(data,label) in tqdm(enumerate(test_loader)):
+            data = data.to(device)
+            label = label.to(device)
+            output = net(data)
+            loss = criterion(output,label)
+            test_loss += loss.item() * data.shape[0]
+            __,predicted = torch.max(output.data,1)
+            total += label.size(0)
+            correct += (predicted == label).sum().item()
+        train_loss = train_loss / train_set_size
+        test_loss = test_loss / test_set_size
+        train_loss_array.append(train_loss)
+        test_loss_array.append(test_loss)
+        accuracy = correct / total
+        accuracy_array.append(accuracy)
+            
+        print(f"{info}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+        
+    return net, train_loss_array, test_loss_array, accuracy_array
 
 def main():
     USE_CUDA = True
@@ -191,56 +247,19 @@ def main():
         test_set_first_stage = MyDataset(net_test_y,net_test_data)
         train_loader_first_stage = DataLoader(train_set_first_stage,batch_size=100,shuffle=True,num_workers = num_workers)
         test_loader_first_stage = DataLoader(test_set_first_stage,batch_size=100,shuffle=False,num_workers = num_workers)
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(net1.parameters(),lr=0.0001)
-        train_loss_first_stage = []
-        test_loss_first_stage = []
-        accuracies = []
-        for epoch in range(epochs_first_stage):
-            train_loss = 0.0
-            test_loss = 0.0
-            net1.train() # Switch to training mode
-            for idx,(data,label) in tqdm(enumerate(train_loader_first_stage)):
-                data = data.to(device)
-                label = label.to(device)
-                optimizer.zero_grad() # reset gradient to zero
-                output = net1(data)
-                loss = criterion(output,label)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item() * data.shape[0]
-            
-            net1.eval() # Switch to evaluation mode
-            correct = 0
-            total = 0
-            for idx,(data,label) in tqdm(enumerate(test_loader_first_stage)):
-                data = data.to(device)
-                label = label.to(device)
-                output = net1(data)
-                loss = criterion(output,label)
-                test_loss += loss.item() * data.shape[0]
-                __,predicted = torch.max(output.data,1)
-                total += label.size(0)
-                correct += (predicted == label).sum().item()
-            train_loss = train_loss / train_set_size
-            test_loss = test_loss / test_set_size
-            train_loss_first_stage.append(train_loss)
-            test_loss_first_stage.append(test_loss)
-            accuracy = correct / total
-            accuracies.append(accuracy)
-            
-            print(f"1st Stage, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+        
+        net1, train_loss_first_stage, test_loss_first_stage, accuracies = train_net\
+            (device, train_loader_first_stage, test_loader_first_stage, train_set_size,\
+                test_set_size, sizes, dropout_first_stage, dropout_final, epochs_first_stage, "1st Stage, TestBlock:" + str(block_i))
         
         sio.savemat(result_folder + '/testblock' + str(block_i) + '/net1_result.mat', {'train_loss':train_loss_first_stage,'test_loss':test_loss_first_stage,'accuracy':accuracies})
         
         # Net Training Stage:2
+        if transfer_learning:
+            epochs_stage2 = epoch_transfer
+        else:
+            epochs_stage2 = epochs_no_transfer
         for s in range(num_subject):
-            net2 = DNN(sizes,dropout_second_stage,dropout_final)
-            if transfer_learning:
-                net2.transfer(net1)
-                epochs_subject = epoch_transfer
-            else:
-                epochs_subject = epochs_no_transfer
             # Obtain subject specific data
             train_set_size_subject = num_character*(num_block-1)
             net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
@@ -258,47 +277,10 @@ def main():
             train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=num_character*(num_block-1),shuffle=True,num_workers=num_workers)
             test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=num_character,shuffle=False,num_workers=num_workers)
             sizes = net_train_data.shape[1:4] # sample, # character, # subband
-            net2 = DNN(sizes,dropout_second_stage,dropout_final) # net for stage 2
-            net2 = net2.to(device)
-            criterion_second_stage = nn.CrossEntropyLoss()
-            optimizer_second_stage = optim.Adam(net2.parameters(),lr=0.0001)
-            train_loss_second_stage = []
-            test_loss_second_stage = []
-            accuracies_second_stage = []
-            for epoch in range(epochs_subject):
-                train_loss = 0.0
-                test_loss = 0.0
-                net2.train() # Switch to training mode
-                for idx,(data,label) in tqdm(enumerate(train_loader_second_stage)):
-                    data = data.to(device)
-                    label = label.to(device)
-                    optimizer_second_stage.zero_grad() # reset gradient to zero
-                    output = net2(data)
-                    loss = criterion_second_stage(output,label)
-                    loss.backward()
-                    optimizer_second_stage.step()
-                    train_loss += loss.item() * data.shape[0]
-                
-                net2.eval() # Switch to evaluation mode
-                correct = 0
-                total = 0
-                for idx,(data,label) in tqdm(enumerate(test_loader_second_stage)):
-                    data = data.to(device)
-                    label = label.to(device)
-                    output = net2(data)
-                    loss = criterion_second_stage(output,label)
-                    test_loss += loss.item() * data.shape[0]
-                    __,predicted = torch.max(output.data,1)
-                    total += label.size(0)
-                    correct += (predicted == label).sum().item()
-                train_loss = train_loss / train_set_size_subject
-                test_loss = test_loss / test_set_size_subject
-                train_loss_second_stage.append(train_loss)
-                test_loss_second_stage.append(test_loss)
-                accuracy = correct / total
-                accuracies_second_stage.append(accuracy)
-                
-                print(f"2nd Stage, Suabject:{s}, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+            __, train_loss_second_stage, test_loss_second_stage, accuracies_second_stage = train_net\
+                (device, train_loader_second_stage, test_loader_second_stage, train_set_size_subject,\
+                    test_set_size_subject, sizes, dropout_second_stage, dropout_final, epochs_stage2,\
+                        "2nd Stage, TestBlock:" + str(block_i) + ", Subject:" + str(s), net1)
         
             sio.savemat(result_folder + '/testblock' + str(block_i) + '/net2_result_Subject_' + str(s) + '_.mat', \
                 {'train_loss':train_loss_second_stage,'test_loss':test_loss_second_stage,'accuracy':accuracies_second_stage})
