@@ -244,13 +244,13 @@ def main():
             # Obtain subject specific data
             train_set_size_subject = num_character*(num_block-1)
             net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
-                reshape([train_set_size,num_subband,num_sample,num_character])
+                reshape([train_set_size_subject,num_subband,num_sample,num_character])
             all_data_y_subject = all_data_y[:,training_blocks,:]
             net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size,1]).squeeze()
         
-            test_set_size = num_character
+            test_set_size_subject = num_character
             net_test_data_subject = net_test_data_tmp[:,:,:,:,s].squeeze()\
-                .transpose([2,0,1,3]).reshape([test_set_size,num_subband,num_sample,num_character])
+                .transpose([2,0,1,3]).reshape([test_set_size_subject,num_subband,num_sample,num_character])
             all_data_y_subject = all_data_y[:,block_i,:].squeeze()
             net_test_y_subject = all_data_y_subject[:,s].squeeze()
             train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
