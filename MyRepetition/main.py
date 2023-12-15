@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.signal as sig
+import scipy.io as sio
 from preproc import preproc
 from train_trca import train_trca
 from trca_recognition import trca_recognition
@@ -12,6 +13,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import torch.optim as optim
 import multiprocessing
+import os
 
 class MyDataset(Dataset): # Custom Dataset
     def __init__(self,lables,data):
@@ -81,6 +83,9 @@ def main():
     num_workers = 8
     print('Num workers:', num_workers)
     
+    result_folder = "test0"
+    result_folder = './' + result_folder
+    
     # set parameters
     is_ensemble = True # Use Ensemble TRCA or not
     transfer_learning = True # Use Transfer Learning or not
@@ -101,8 +106,18 @@ def main():
     dropout_second_stage = 0.6 # Dropout probabilities of first two dropout layers at second stage
     dropout_final = 0.95
     epochs_first_stage = 500
-    max_epochs_first_stage = 1000
-    max_epochs_second_stage = 2000
+    epoch_transfer = 1000
+    epochs_no_transfer = 2000
+    parameters = {'is_ensemble':is_ensemble,'transfer_learning':transfer_learning,'t_pre_stimulus':t_pre_stimulus,\
+        't_visual_latency':t_visual_latency,'t_visual_cue':t_visual_cue,'sample_rate':sample_rate,'channels':channels,\
+        'num_subband':num_subband,'num_character':num_character,'num_block':num_block,'num_channel':num_channel,\
+        'filter_order':filter_order,'passband_ripple':passband_ripple,'high_cutoff':high_cutoff,'low_cutoff':low_cutoff,\
+        'dropout_first_stage':dropout_first_stage,'dropout_second_stage':dropout_second_stage,'dropout_final':dropout_final,\
+        'epochs_first_stage':epochs_first_stage,'max_epochs_first_stage':epoch_transfer,\
+        'max_epochs_second_stage':epochs_no_transfer}
+    if not os.path.exists(result_folder):
+        os.makedirs(result_folder)
+    sio.savemat(result_folder + '/parameters.mat', parameters)
     
     # Preprocess
     t_sel = t_pre_stimulus + t_visual_cue
@@ -155,6 +170,10 @@ def main():
                             net_train_data_tmp[subband_i,:,character_i,w_i,blk_i,subject_i] = np.dot(temp,model['w'][w_i,subband_i,:])
                         net_test_data_tmp[subband_i,:,character_i,w_i,subject_i] = np.dot(np.squeeze(trca_test_data\
                             [:,:,character_i,subject_i,subband_i]).transpose(),model['w'][w_i,subband_i,:])
+        
+        if not os.path.exists(result_folder + '/testblock' + str(block_i)):
+            os.makedirs(result_folder + '/testblock' + str(block_i))
+        sio.savemat(result_folder + '/testblock' + str(block_i) + '/trca_result.mat', {'accuracy_trca':accuracy_trca,'itr_trca':itr_trca})
         
         train_set_size = num_character*(num_block-1)*num_subject
         net_train_data = net_train_data_tmp.transpose([2,4,5,0,1,3]).reshape([train_set_size,num_subband,num_sample,num_character])
@@ -212,31 +231,77 @@ def main():
             
             print(f"1st Stage, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
         
-        # # Net Training Stage:2
-        # for s in range(num_subject):
-        #     net2 = DNN(sizes,dropout_second_stage,dropout_final)
-        #     if transfer_learning:
-        #         net2.transfer(net1)
-        #         epochs_subject = max_epochs_first_stage
-        #     else:
-        #         epochs_subject = max_epochs_second_stage
-        #     # get subject specific data
-        #     train_set_size_subject = num_character*(num_block-1)
-        #     net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
-        #         reshape([train_set_size,num_subband,num_sample,num_character])
-        #     all_data_y_subject = all_data_y[:,training_blocks,:]
-        #     net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size,1]).squeeze()
+        sio.savemat(result_folder + '/testblock' + str(block_i) + '/net1_result.mat', {'train_loss':train_loss_first_stage,'test_loss':test_loss_first_stage,'accuracy':accuracies})
         
-        #     test_set_size = num_character
-        #     net_test_data_subject = net_test_data_tmp[:,:,:,:,s].squeeze()\
-        #         .transpose([2,0,1,3]).reshape([test_set_size,num_subband,num_sample,num_character])
-        #     all_data_y_subject = all_data_y[:,block_i,:].squeeze()
-        #     net_test_y_subject = all_data_y_subject[:,s].squeeze().reshape([test_set_size,1]).squeeze()
-        #     train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
-        #     test_set_second_stage = MyDataset(net_test_y_subject,net_test_data_subject)
-        #     train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=num_workers)
-        #     test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=num_workers)
-
+        # Net Training Stage:2
+        for s in range(num_subject):
+            net2 = DNN(sizes,dropout_second_stage,dropout_final)
+            if transfer_learning:
+                net2.transfer(net1)
+                epochs_subject = epoch_transfer
+            else:
+                epochs_subject = epochs_no_transfer
+            # Obtain subject specific data
+            train_set_size_subject = num_character*(num_block-1)
+            net_train_data_subject = np.squeeze(net_train_data_tmp[:,:,:,:,:,s]).transpose([2,4,0,1,3]).\
+                reshape([train_set_size,num_subband,num_sample,num_character])
+            all_data_y_subject = all_data_y[:,training_blocks,:]
+            net_train_y_subject = (all_data_y_subject[:,:,s].squeeze()).reshape([train_set_size,1]).squeeze()
+        
+            test_set_size = num_character
+            net_test_data_subject = net_test_data_tmp[:,:,:,:,s].squeeze()\
+                .transpose([2,0,1,3]).reshape([test_set_size,num_subband,num_sample,num_character])
+            all_data_y_subject = all_data_y[:,block_i,:].squeeze()
+            net_test_y_subject = all_data_y_subject[:,s].squeeze()
+            train_set_second_stage = MyDataset(net_train_y_subject,net_train_data_subject)
+            test_set_second_stage = MyDataset(net_test_y_subject,net_test_data_subject)
+            train_loader_second_stage = DataLoader(train_set_second_stage,batch_size=100,shuffle=True,num_workers=num_workers)
+            test_loader_second_stage = DataLoader(test_set_second_stage,batch_size=100,shuffle=False,num_workers=num_workers)
+            sizes = net_train_data.shape[1:4] # sample, # character, # subband
+            net2 = DNN(sizes,dropout_second_stage,dropout_final) # net for stage 2
+            net2 = net2.to(device)
+            criterion = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(net2.parameters(),lr=0.0001)
+            train_loss_second_stage = []
+            test_loss_second_stage = []
+            accuracies_second_stage = []
+            for epoch in range(epochs_subject):
+                train_loss = 0.0
+                test_loss = 0.0
+                net2.train() # Switch to training mode
+                for idx,(data,label) in tqdm(enumerate(train_loader_second_stage)):
+                    data = data.to(device)
+                    label = label.to(device)
+                    optimizer.zero_grad() # reset gradient to zero
+                    output = net2(data)
+                    loss = criterion(output,label)
+                    loss.backward()
+                    optimizer.step()
+                    train_loss += loss.item() * data.shape[0]
+                
+                net2.eval() # Switch to evaluation mode
+                correct = 0
+                total = 0
+                for idx,(data,label) in tqdm(enumerate(test_loader_second_stage)):
+                    data = data.to(device)
+                    label = label.to(device)
+                    output = net2(data)
+                    loss = criterion(output,label)
+                    test_loss += loss.item() * data.shape[0]
+                    __,predicted = torch.max(output.data,1)
+                    total += label.size(0)
+                    correct += (predicted == label).sum().item()
+                train_loss = train_loss / train_set_size
+                test_loss = test_loss / test_set_size
+                train_loss_second_stage.append(train_loss)
+                test_loss_second_stage.append(test_loss)
+                accuracy = correct / total
+                accuracies_second_stage.append(accuracy)
+                
+                print(f"2nd Stage, Suabject:{s}, TestBlock:{block_i}, Epoch:{epoch}, Acc:{correct/total}, Train Loss:{train_loss}, Test Loss:{test_loss}")
+        
+        sio.savemat(result_folder + '/testblock' + str(block_i) + '/net2_result_Subject_' + str(s) + '_.mat', \
+            {'train_loss':train_loss_second_stage,'test_loss':test_loss_second_stage,'accuracy':accuracies_second_stage})
 
 if __name__ == '__main__':
     main()
