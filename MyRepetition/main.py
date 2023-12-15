@@ -139,7 +139,7 @@ def main():
     num_workers = 8
     print('Num workers:', num_workers)
     
-    result_folder = "test0"
+    result_folder = "test1"
     result_folder = './' + result_folder
     
     # set parameters
