@@ -291,8 +291,8 @@ def main():
                     __,predicted = torch.max(output.data,1)
                     total += label.size(0)
                     correct += (predicted == label).sum().item()
-                train_loss = train_loss / train_set_size
-                test_loss = test_loss / test_set_size
+                train_loss = train_loss / train_set_size_subject
+                test_loss = test_loss / test_set_size_subject
                 train_loss_second_stage.append(train_loss)
                 test_loss_second_stage.append(test_loss)
                 accuracy = correct / total
