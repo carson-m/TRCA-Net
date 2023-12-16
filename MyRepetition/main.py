@@ -136,10 +136,10 @@ def main():
     print('Using device', device)
     maximum_thread = multiprocessing.cpu_count()
     print('Available threads:', maximum_thread)
-    num_workers = 8
+    num_workers = 2
     print('Num workers:', num_workers)
     
-    result_folder = "test1"
+    result_folder = "test2"
     result_folder = './' + result_folder
     
     # set parameters
