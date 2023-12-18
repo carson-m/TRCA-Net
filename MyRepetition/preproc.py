@@ -22,7 +22,7 @@ def preproc(dir, channels, samples, num_character, num_block):
         else:
             list.remove(item)
     
-    num_subjects = len(list)        
+    num_subjects = len(list)
     # concatenate the path and the file name
     for i in range(num_subjects):
         list[i] = os.path.join(dir, list[i])

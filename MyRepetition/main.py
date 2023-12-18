@@ -186,7 +186,7 @@ def main():
     all_data, all_data_y = preproc('../../Data/Benchmark', channels, samples, num_character, num_block) # GET DATA all_data: preprocessed data, all_data_y: labels
     # all_data: (# channels, # sample, # characters, # blocks, # subjects)
     # all_data_y: (1, # channels, # blocks, # subjects)
-    num_subject = all_data.shape[4] + 1 # number of subjects
+    num_subject = all_data.shape[4] # number of subjects
     
     # Get bandpass filters
     bpFilters = []
