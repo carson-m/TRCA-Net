@@ -166,8 +166,8 @@ def main():
     dropout_second_stage = 0.6 # Dropout probabilities of first two dropout layers at second stage
     dropout_final = 0.95
     epochs_first_stage = 500
-    epoch_transfer = 1000
-    epochs_no_transfer = 2000
+    epoch_transfer = 350
+    epochs_no_transfer = 1000
     parameters = {'is_ensemble':is_ensemble,'transfer_learning':transfer_learning,'lr_stage1':lr_stage1,'lr_stage2':lr_stage2,'t_pre_stimulus':t_pre_stimulus,\
         't_visual_latency':t_visual_latency,'t_visual_cue':t_visual_cue,'sample_rate':sample_rate,'channels':channels,\
         'num_subband':num_subband,'num_character':num_character,'num_block':num_block,'num_channel':num_channel,\
