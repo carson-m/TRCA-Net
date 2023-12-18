@@ -7,10 +7,10 @@ from trca_recognition import trca_recognition
 from itr import itr
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
+# from torchvision import transforms, utils
 import torch.nn as nn
 import torch.nn.functional as F
-from tqdm import tqdm
+# from tqdm import tqdm
 import torch.optim as optim
 import multiprocessing
 import os
@@ -97,7 +97,7 @@ def train_net(device, train_loader, test_loader, train_set_size, test_set_size, 
         train_loss = 0.0
         test_loss = 0.0
         net.train() # Switch to training mode
-        for __,(data,label) in tqdm(enumerate(train_loader)):
+        for data,label in train_loader:
             data = data.to(device)
             label = label.to(device)
             optimizer.zero_grad() # reset gradient to zero
@@ -110,7 +110,7 @@ def train_net(device, train_loader, test_loader, train_set_size, test_set_size, 
         net.eval() # Switch to evaluation mode
         correct = 0
         total = 0
-        for __,(data,label) in tqdm(enumerate(test_loader)):
+        for data,label in test_loader:
             data = data.to(device)
             label = label.to(device)
             output = net(data)
@@ -141,7 +141,7 @@ def main():
     num_workers = 1
     print('Num workers:', num_workers)
     
-    result_folder = "test5"
+    result_folder = "test6"
     result_folder = './' + result_folder
     
     # set parameters
