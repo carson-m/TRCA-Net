@@ -71,7 +71,7 @@ class DNN(nn.Module):
     #     self.fc.weight.data = stage1_model.fc.weight.data
     #     self.fc.bias.data = stage1_model.fc.bias.data
 
-def train_net(device, train_loader, test_loader, train_set_size, test_set_size, sizes, dropout_1, dropout_2, num_epochs, info, transfer_learning = False, transfer_net=None):
+def train_net(device, train_loader, test_loader, train_set_size, test_set_size, sizes, dropout_1, dropout_2, num_epochs, info, lr, transfer_learning = False, transfer_net=None):
     #sizes: # sample, # character, # subband
     #train_loader: DataLoader
     #test_loader: DataLoader
@@ -89,7 +89,7 @@ def train_net(device, train_loader, test_loader, train_set_size, test_set_size, 
         net.drop1st.p = dropout_1
         net.dropfinal.p = dropout_2
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(),lr=0.0001)
+    optimizer = optim.Adam(net.parameters(),lr)
     train_loss_array = []
     test_loss_array = []
     accuracy_array = []
@@ -147,6 +147,8 @@ def main():
     # set parameters
     is_ensemble = True # Use Ensemble TRCA or not
     transfer_learning = True # Use Transfer Learning or not
+    lr_stage1 = 0.0001 # learning rate of stage 1
+    lr_stage2 = 0.0002 # learning rate of stage 2
     t_pre_stimulus = 0.5 # time before stimulus[s]
     t_visual_latency = 0.14 # time visual latency[s]
     t_visual_cue = 0.5 # time visual cue[s]
@@ -166,7 +168,7 @@ def main():
     epochs_first_stage = 500
     epoch_transfer = 1000
     epochs_no_transfer = 2000
-    parameters = {'is_ensemble':is_ensemble,'transfer_learning':transfer_learning,'t_pre_stimulus':t_pre_stimulus,\
+    parameters = {'is_ensemble':is_ensemble,'transfer_learning':transfer_learning,'lr_stage1':lr_stage1,'lr_stage2':lr_stage2,'t_pre_stimulus':t_pre_stimulus,\
         't_visual_latency':t_visual_latency,'t_visual_cue':t_visual_cue,'sample_rate':sample_rate,'channels':channels,\
         'num_subband':num_subband,'num_character':num_character,'num_block':num_block,'num_channel':num_channel,\
         'filter_order':filter_order,'passband_ripple':passband_ripple,'high_cutoff':high_cutoff,'low_cutoff':low_cutoff,\
@@ -252,7 +254,7 @@ def main():
         
         net1, train_loss_first_stage, test_loss_first_stage, accuracies = train_net\
             (device, train_loader_first_stage, test_loader_first_stage, train_set_size,\
-                test_set_size, sizes, dropout_first_stage, dropout_final, epochs_first_stage, "1st Stage, TestBlock:" + str(block_i))
+                test_set_size, sizes, dropout_first_stage, dropout_final, epochs_first_stage, "1st Stage, TestBlock:" + str(block_i), lr_stage1)
         
         sio.savemat(result_folder + '/testblock' + str(block_i) + '/net1_result.mat', {'train_loss':train_loss_first_stage,'test_loss':test_loss_first_stage,'accuracy':accuracies})
         torch.save(net1.state_dict(), result_folder + '/testblock' + str(block_i) + '/net1_params.pth')
@@ -283,7 +285,7 @@ def main():
             __, train_loss_second_stage, test_loss_second_stage, accuracies_second_stage = train_net\
                 (device, train_loader_second_stage, test_loader_second_stage, train_set_size_subject,\
                     test_set_size_subject, sizes, dropout_second_stage, dropout_final, epochs_stage2,\
-                        "2nd Stage, TestBlock:" + str(block_i) + ", Subject:" + str(s), net1)
+                        "2nd Stage, TestBlock:" + str(block_i) + ", Subject:" + str(s), lr_stage2, True, net1)
         
             sio.savemat(result_folder + '/testblock' + str(block_i) + '/net2_result_Subject_' + str(s) + '_.mat', \
                 {'train_loss':train_loss_second_stage,'test_loss':test_loss_second_stage,'accuracy':accuracies_second_stage})
