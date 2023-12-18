@@ -55,23 +55,23 @@ class DNN(nn.Module):
         x = self.softmax(x)
         return x
     
-    # define function "transfer" to transfer the weights from the trained model to the new model
-    def transfer(self, stage1_model):
-        self.conv1.weight.data = stage1_model.conv1.weight.data
+    # # define function "transfer" to transfer the weights from the trained model to the new model
+    # def transfer(self, stage1_model):
+    #     self.conv1.weight.data = stage1_model.conv1.weight.data
         
-        self.conv2.weight.data = stage1_model.conv2.weight.data
-        self.conv2.bias.data = stage1_model.conv2.bias.data
+    #     self.conv2.weight.data = stage1_model.conv2.weight.data
+    #     self.conv2.bias.data = stage1_model.conv2.bias.data
         
-        self.conv3.weight.data = stage1_model.conv3.weight.data
-        self.conv3.bias.data = stage1_model.conv3.bias.data
+    #     self.conv3.weight.data = stage1_model.conv3.weight.data
+    #     self.conv3.bias.data = stage1_model.conv3.bias.data
         
-        self.conv4.weight.data = stage1_model.conv4.weight.data
-        self.conv4.bias.data = stage1_model.conv4.bias.data
+    #     self.conv4.weight.data = stage1_model.conv4.weight.data
+    #     self.conv4.bias.data = stage1_model.conv4.bias.data
         
-        self.fc.weight.data = stage1_model.fc.weight.data
-        self.fc.bias.data = stage1_model.fc.bias.data
+    #     self.fc.weight.data = stage1_model.fc.weight.data
+    #     self.fc.bias.data = stage1_model.fc.bias.data
 
-def train_net(device, train_loader, test_loader, train_set_size, test_set_size, sizes, dropout_1, dropout_2, num_epochs, info, transfer_net=None):
+def train_net(device, train_loader, test_loader, train_set_size, test_set_size, sizes, dropout_1, dropout_2, num_epochs, info, transfer_learning = False, transfer_net=None):
     #sizes: # sample, # character, # subband
     #train_loader: DataLoader
     #test_loader: DataLoader
@@ -84,8 +84,10 @@ def train_net(device, train_loader, test_loader, train_set_size, test_set_size, 
     
     net = DNN(sizes,dropout_1,dropout_2) # net for stage 1
     net = net.to(device)
-    if transfer_net is not None:
-        net.transfer(transfer_net)
+    if transfer_learning is True and transfer_net is not None:
+        net.load_state_dict(transfer_net.state_dict())
+        net.drop1st.p = dropout_1
+        net.dropfinal.p = dropout_2
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(),lr=0.0001)
     train_loss_array = []
@@ -136,7 +138,7 @@ def main():
     print('Using device', device)
     maximum_thread = multiprocessing.cpu_count()
     print('Available threads:', maximum_thread)
-    num_workers = 2
+    num_workers = 1
     print('Num workers:', num_workers)
     
     result_folder = "test2"
@@ -184,7 +186,7 @@ def main():
     all_data, all_data_y = preproc('../../Data/Benchmark', channels, samples, num_character, num_block) # GET DATA all_data: preprocessed data, all_data_y: labels
     # all_data: (# channels, # sample, # characters, # blocks, # subjects)
     # all_data_y: (1, # channels, # blocks, # subjects)
-    num_subject = all_data.shape[4] # number of subjects
+    num_subject = all_data.shape[4] + 1 # number of subjects
     
     # Get bandpass filters
     bpFilters = []
