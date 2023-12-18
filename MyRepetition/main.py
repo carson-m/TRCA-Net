@@ -141,7 +141,7 @@ def main():
     num_workers = 1
     print('Num workers:', num_workers)
     
-    result_folder = "test2"
+    result_folder = "test5"
     result_folder = './' + result_folder
     
     # set parameters
@@ -165,7 +165,7 @@ def main():
     dropout_first_stage = 0.1 # Dropout probability of first two dropout layers at first stage
     dropout_second_stage = 0.6 # Dropout probabilities of first two dropout layers at second stage
     dropout_final = 0.95
-    epochs_first_stage = 500
+    epochs_first_stage = 650
     epoch_transfer = 350
     epochs_no_transfer = 1000
     parameters = {'is_ensemble':is_ensemble,'transfer_learning':transfer_learning,'lr_stage1':lr_stage1,'lr_stage2':lr_stage2,'t_pre_stimulus':t_pre_stimulus,\
